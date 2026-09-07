@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小野大作战 · Memory Game</title>
+<style>
+  /* 内置卡通字体（离线可用，微信也能显示） */
+  @font-face {
+    font-family: "ZCOOL KuaiLe";
+    src: url("fonts/zcool-chinese.woff2") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+  }
+  :root {
+    --bg1: #0f172a;
+    --bg2: #1e1b4b;
+    --card-back1: #6366f1;
+    --card-back2: #8b5cf6;
+    --accent: #fbbf24;
+    --danger: #ef4444;
+    --green: #16a34a;
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+    background: radial-gradient(circle at 20% 15%, var(--bg2), var(--bg1));
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .wrap { width: 100%; max-width: 540px; position: relative; z-index: 1; }
+
+  /* 关卡选择页的视频背景 */
+  .bg-video { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+  .bg-video video { width: 100%; height: 100%; object-fit: cover; }
+  .bg-video.hidden { display: none; }
+  header { text-align: center; margin-bottom: 18px; }
+  h1 { font-size: 2.1rem; letter-spacing: 1px; font-weight: 800; text-shadow: 0 2px 14px rgba(0,0,0,.85); font-family: "ZCOOL KuaiLe", "PingFang SC", sans-serif; }
+  h1 span { color: #fef08a; text-shadow: 0 2px 10px rgba(0,0,0,.55); }
+  .sub { color: #cbd5e1; margin-top: 6px; font-size: .95rem; text-shadow: 0 1px 8px rgba(0,0,0,.95); font-family: "ZCOOL KuaiLe", "PingFang SC", sans-serif; }
+
+  .btn {
+    background: linear-gradient(90deg, var(--card-back1), var(--card-back2));
+    color: white; border: none; border-radius: 12px; padding: 10px 18px;
+    font-size: .9rem; font-weight: 700; cursor: pointer; transition: .2s;
+  }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(139,92,246,.35); }
+  .btn:active { transform: translateY(0); }
+  .btn.ghost { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15); }
+  .btn:disabled { opacity: .35; cursor: not-allowed; transform: none; box-shadow: none; }
+  .btn.block { width: 100%; }
+
+  /* --- Level Select --- */
+  #levelSelect { display: block; }
+  .lvls { display: flex; flex-direction: column; gap: 14px; margin-top: 20px; }
+  .lvl {
+    background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.22);
+    border-radius: 16px; padding: 18px; display: flex; align-items: center;
+    justify-content: space-between; gap: 14px; cursor: pointer; transition: .2s;
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 6px 18px rgba(0,0,0,.25);
+  }
+  .lvl:hover { border-color: var(--accent); transform: translateY(-2px); background: rgba(255,255,255,.22); }
+  .lvl.locked { opacity: .6; cursor: not-allowed; }
+  .lvl.locked:hover { border-color: rgba(255,255,255,.22); transform: none; background: rgba(255,255,255,.14); }
+  .lvl .info h3 { font-size: 1.15rem; text-shadow: 0 1px 6px rgba(0,0,0,.7); font-family: "ZCOOL KuaiLe", "PingFang SC", sans-serif; }
+  .lvl .info .diff { color: #e2e8f0; font-size: .82rem; margin-top: 4px; text-shadow: 0 1px 5px rgba(0,0,0,.75); }
+  .lvl .right { text-align: right; }
+  .stars { color: var(--accent); font-size: 1.05rem; letter-spacing: 2px; }
+  .stars .off { color: rgba(255,255,255,.18); }
+  .lock { font-size: 1.3rem; color: var(--muted); }
+  .tag { display:inline-block; background: rgba(251,191,36,.15); color: var(--accent); padding: 3px 9px; border-radius: 20px; font-size: .72rem; font-weight: 700; }
+
+  /* --- Play --- */
+  #play { display: none; }
+  .status { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .pills { display: flex; gap: 10px; }
+  .pill { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); padding: 8px 14px; border-radius: 12px; font-size: .85rem; display: flex; align-items: center; gap: 6px; }
+  .pill b { color: var(--accent); font-size: 1.05rem; }
+  .pill.time b { color: #4ade80; }
+  .pill.time.warn b { color: var(--danger); }
+  .pill .label { color: var(--muted); }
+  .actions { display: flex; gap: 8px; }
+
+  .grid { display: grid; gap: 12px; }
+  .card { aspect-ratio: 3/4; perspective: 800px; cursor: pointer; }
+  .inner { position: relative; width: 100%; height: 100%; transition: transform .5s cubic-bezier(.4,.2,.2,1); transform-style: preserve-3d; }
+  .card.flipped .inner, .card.matched .inner { transform: rotateY(180deg); }
+  .face { position: absolute; inset: 0; border-radius: 14px; display: flex; align-items: center; justify-content: center; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+  .back { background: linear-gradient(135deg, var(--card-back1), var(--card-back2)); border: 1px solid rgba(255,255,255,.15); }
+  .back::after { content: ""; position: absolute; inset: 8px; border: 1.5px dashed rgba(255,255,255,.35); border-radius: 9px; }
+  .back .qs { font-size: 1.6rem; color: rgba(255,255,255,.5); font-weight: 800; }
+  .front { background: linear-gradient(135deg, #1e293b, #334155); border: 1px solid rgba(255,255,255,.12); transform: rotateY(180deg); font-size: 2.4rem; overflow: hidden; }
+  .card-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .card-emoji { display: none; }
+  .card.matched .front { background: linear-gradient(135deg, #14532d, #166534); animation: pop .4s ease; }
+  .card.shake { animation: shake .4s ease; }
+  .card.matched { cursor: default; }
+  @keyframes pop { 0% { transform: translateY(0) scale(1);} 40% { transform: translateY(-6px) scale(1.08);} 100% { transform: translateY(0) scale(1);} }
+  @keyframes shake { 0%,100% { transform: translateX(0);} 25% { transform: translateX(-5px);} 75% { transform: translateX(5px);} }
+
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 10; }
+  .modal.show { display: flex; }
+  .modal-box { background: var(--bg2); border: 1px solid rgba(255,255,255,.1); border-radius: 20px; padding: 28px; text-align: center; max-width: 340px; width: 100%; }
+  .modal-box h2 { font-size: 1.4rem; margin-bottom: 8px; }
+  .modal-box p { color: var(--muted); margin-bottom: 18px; }
+  .modal-box .star { font-size: 2.6rem; margin-bottom: 6px; }
+  .modal-box .btn { margin-top: 8px; }
+  .modal-box .btn + .btn { margin-top: 8px; }
+
+  @media (max-width: 420px) {
+    .grid { gap: 8px; }
+    .front { font-size: 1.9rem; }
+    .back .qs { font-size: 1.3rem; }
+    .pop-in { display: none; }
+  }
+  @media (max-height: 760px) {
+    .wrap { margin-top: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="bg-video" id="bgVideo">
+  <video autoplay loop muted playsinline webkit-playsinline x5-playsinline id="bgVid"></video>
+</div>
+<div class="wrap">
+  <header>
+    <h1>小野<span>大作战</span></h1>
+    <p class="sub">经典 3 关，由易到难，每关都有倒计时 ⏳</p>
+  </header>
+
+  <!-- 关卡选择 -->
+  <div id="levelSelect">
+    <div class="lvls" id="levelList"></div>
+  </div>
+
+  <!-- 游戏区 -->
+  <div id="play">
+    <div class="status">
+      <div class="pills">
+        <div class="pill" id="levelLabel"><span class="label">关卡</span> <b id="lvlName">-</b></div>
+        <div class="pill"><span class="label">步数</span> <b id="moves">0</b></div>
+        <div class="pill time" id="timePill"><span class="label">剩余</span> <b id="time">0:00</b></div>
+      </div>
+      <div class="actions">
+        <button class="btn ghost" id="backBtn">选关</button>
+        <button class="btn" id="restartBtn">重来</button>
+      </div>
+    </div>
+    <div class="grid" id="grid"></div>
+  </div>
+</div>
+
+<!-- 通关/超时弹窗 -->
+<div class="modal" id="modal">
+  <div class="modal-box" id="modalBox"></div>
+</div>
+
+<script>
+  const POOL = ["🍎","🍌","🍇","🍓","🍒","🍑","🍍","🥝","🌽","🥕","🍕","🍔","🥨","🧀","🍩","🍪","🍯","🥥"];
+  const LEVELS = [
+    { id: 1, name: "简单",  cols: 4, rows: 4, pairs: 8,  time: 45,  diff: "4×4 · 8对 · 限时45秒", tag: "新手友好" },
+    { id: 2, name: "中等",  cols: 4, rows: 5, pairs: 10, time: 65,  diff: "4×5 · 10对 · 限时65秒", tag: "有点挑战" },
+    { id: 3, name: "困难",  cols: 6, rows: 6, pairs: 18, time: 95,  diff: "6×6 · 18对 · 限时95秒", tag: "记忆大师" },
+  ];
+  const KEY = "memorygame_progress";
+
+  const gridEl = document.getElementById("grid");
+  const movesEl = document.getElementById("moves");
+  const timeEl = document.getElementById("time");
+  const timePill = document.getElementById("timePill");
+  const lvlNameEl = document.getElementById("lvlName");
+  const modal = document.getElementById("modal");
+  const modalBox = document.getElementById("modalBox");
+  const levelSelect = document.getElementById("levelSelect");
+  const play = document.getElementById("play");
+  const levelList = document.getElementById("levelList");
+
+  // 微信移动端自动播放视频兼容（微信默认不自动播，用户一碰屏幕就播放）
+  (function(){
+    const vid = document.getElementById("bgVid");
+    const SMALL = "video/bg_small.m4v";
+    const ORIG = "video/bg.mp4";
+    // 优先用压缩小视频，缺失/播放失败则回退到原视频
+    function setSrc(src){ vid.src = src; vid.load(); }
+    setSrc(SMALL);
+    vid.addEventListener("error", function(){
+      if(vid.getAttribute("src") === SMALL){ setSrc(ORIG); }
+      forcePlay();
+    });
+    function forcePlay(){
+      if(!vid) return;
+      vid.muted = true;
+      var p = vid.play();
+      if(p && p.catch) p.catch(function(){});
+    }
+    forcePlay();
+    document.addEventListener("WeixinJSBridgeReady", forcePlay);
+    ["touchstart","click","touchmove","scroll","keydown","touchcancel"].forEach(function(ev){
+      document.addEventListener(ev, forcePlay, {once:true, passive:true});
+    });
+  })();
+
+  let cards = [], first = null, lock = false, moves = 0, matchedCount = 0;
+  let timerId = null, remaining = 0, currentLvl = null;
+
+  // ===== 进度存取 =====
+  function getProgress() {
+    try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch(e) { return {}; }
+  }
+  function saveProgress(stars) {
+    const p = getProgress();
+    if (currentLvl && stars > (p[currentLvl.id] || 0)) p[currentLvl.id] = stars;
+    localStorage.setItem(KEY, JSON.stringify(p));
+  }
+  function maxUnlocked() {
+    const p = getProgress();
+    for (let i = 1; i < LEVELS.length; i++) if (!p[LEVELS[i].id]) return i; return LEVELS.length;
+  }
+
+  // ===== 工具 =====
+  function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+  function fmtTime(s) { const m = Math.floor(s / 60), ss = s % 60; return m + ":" + String(ss).padStart(2, "0"); }
+
+  // 图片加载失败时尝试其他格式，最后兜底显示 emoji
+  window.imgFallback = function(img) {
+    const cur = img.dataset.try ? parseInt(img.dataset.try) : 0;
+    const exts = ["jpg", "png", "jpeg", "webp", "svg"];
+    if (cur < exts.length) {
+      img.dataset.try = cur + 1;
+      img.src = "images/" + img.dataset.n + "." + exts[cur];
+    } else {
+      img.style.display = "none";
+      const span = img.parentElement.querySelector(".card-emoji");
+      if (span) span.style.display = "block";
+    }
+  };
+
+  // ===== 关卡选择界面 =====
+  function renderSelect() {
+    const unlocked = maxUnlocked();
+    levelList.innerHTML = "";
+    LEVELS.forEach((lv, i) => {
+      const p = getProgress();
+      const stars = p[lv.id] || 0;
+      const locked = i >= unlocked;
+      const div = document.createElement("div");
+      div.className = "lvl" + (locked ? " locked" : "");
+      div.innerHTML = `
+        <div class="info">
+          <h3>第${lv.id}关 · ${lv.name} <span class="tag">${lv.tag}</span></h3>
+          <div class="diff">${lv.diff}</div>
+        </div>
+        <div class="right">
+          ${locked ? '<div class="lock">🔒</div>' : `<div class="stars">${starStr(stars)}</div>`}
+        </div>`;
+      div.addEventListener("click", () => { if (!locked) startLevel(i); });
+      levelList.appendChild(div);
+    });
+  }
+  function starStr(n) {
+    let s = "";
+    for (let i = 0; i < 3; i++) s += `<span class="${i < n ? '' : 'off'}">★</span>`;
+    return s;
+  }
+
+  // ===== 开始关卡 =====
+  function startLevel(i) {
+    currentLvl = LEVELS[i];
+    levelSelect.style.display = "none";
+    play.style.display = "block";
+    document.getElementById("bgVideo").classList.add("hidden");
+    lvlNameEl.textContent = `第${currentLvl.id}关`;
+    buildGrid(currentLvl);
+  }
+
+  function buildGrid(lv) {
+    const pool = shuffle([...POOL.slice(0, lv.pairs)]);
+    cards = shuffle([...pool, ...pool]);
+    gridEl.innerHTML = "";
+    gridEl.style.gridTemplateColumns = `repeat(${lv.cols}, 1fr)`;
+    cards.forEach((emoji) => {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.dataset.emoji = emoji;
+      const imgNum = POOL.indexOf(emoji) + 1;
+      card.innerHTML = `<div class="inner">
+          <div class="face back"><div class="qs">?</div></div>
+          <div class="face front">
+            <img class="card-img" src="images/${imgNum}.jpg" alt="" data-n="${imgNum}" onerror="imgFallback(this)">
+            <span class="card-emoji">${emoji}</span>
+          </div>
+        </div>`;
+      card.addEventListener("click", () => flip(card));
+      gridEl.appendChild(card);
+    });
+    first = null; lock = false; moves = 0; matchedCount = 0;
+    movesEl.textContent = 0;
+    startCountdown(lv.time);
+  }
+
+  // ===== 倒计时 =====
+  function startCountdown(sec) {
+    stopTimer();
+    remaining = sec; updateTime();
+    timerId = setInterval(() => {
+      remaining--;
+      updateTime();
+      if (remaining <= 0) { stopTimer(); timeUp(); }
+    }, 1000);
+  }
+  function stopTimer() { if (timerId) { clearInterval(timerId); timerId = null; } }
+  function updateTime() {
+    timeEl.textContent = fmtTime(Math.max(0, remaining));
+    timePill.classList.toggle("warn", remaining <= 10);
+  }
+
+  // ===== 翻牌 =====
+  function flip(card) {
+    if (lock || card.classList.contains("flipped") || card.classList.contains("matched")) return;
+    card.classList.add("flipped");
+    if (!first) { first = card; return; }
+    moves++; movesEl.textContent = moves;
+    const a = first, b = card, ea = a.dataset.emoji, eb = b.dataset.emoji;
+    if (ea === eb) {
+      a.classList.add("matched"); b.classList.add("matched");
+      matchedCount += 2; first = null;
+      if (matchedCount === cards.length) win();
+    } else {
+      lock = true;
+      setTimeout(() => { a.classList.add("shake"); b.classList.add("shake"); }, 350);
+      setTimeout(() => {
+        a.classList.remove("flipped", "shake"); b.classList.remove("flipped", "shake");
+        first = null; lock = false;
+      }, 1100);
+    }
+  }
+
+  // ===== 通关 =====
+  function win() {
+    stopTimer();
+    const pairs = currentLvl.pairs;
+    let stars = moves <= pairs ? 3 : (moves <= Math.round(pairs * 1.6) ? 2 : 1);
+    saveProgress(stars);
+    const nextIdx = LEVELS.findIndex(l => l.id === currentLvl.id) + 1;
+    const hasNext = nextIdx < LEVELS.length;
+    modalBox.style.backgroundColor = "";
+    modalBox.innerHTML = `
+      <div class="star">🏆</div>
+      <h2>第${currentLvl.id}关 · 完成！</h2>
+      <div class="stars">${starStr(stars)}</div>
+      <p>用了 ${moves} 步，剩 ${fmtTime(remaining)}</p>
+      ${hasNext
+        ? `<button class="btn block" id="nextBtn">下一关 ➜</button><button class="btn ghost block" id="againBtn">重玩本关</button>`
+        : `<button class="btn block" id="againBtn">再玩一次</button>`}
+    `;
+    modal.classList.add("show");
+    const nextBtn = document.getElementById("nextBtn");
+    const againBtn = document.getElementById("againBtn");
+    if (nextBtn) nextBtn.addEventListener("click", () => { modal.classList.remove("show"); startLevel(nextIdx); });
+    if (againBtn) againBtn.addEventListener("click", () => { modal.classList.remove("show"); startLevel(LEVELS.findIndex(l => l.id === currentLvl.id)); });
+  }
+
+  // ===== 超时 =====
+  function timeUp() {
+    lock = true;
+    modalBox.innerHTML = `
+      <div class="star">⏰</div>
+      <h2>时间到！</h2>
+      <p>还差 ${cards.length - matchedCount} 张没配对，再试一次吧</p>
+      <button class="btn block" id="retryBtn">重新挑战</button>
+      <button class="btn ghost block" id="backBtn2">返回选关</button>
+    `;
+    modal.classList.add("show");
+    document.getElementById("retryBtn").addEventListener("click", () => { modal.classList.remove("show"); startLevel(LEVELS.findIndex(l => l.id === currentLvl.id)); });
+    document.getElementById("backBtn2").addEventListener("click", () => { modal.classList.remove("show"); backToSelect(); });
+  }
+
+  // ===== 返回选关 =====
+  function backToSelect() {
+    stopTimer();
+    play.style.display = "none";
+    modal.classList.remove("show");
+    levelSelect.style.display = "block";
+    document.getElementById("bgVideo").classList.remove("hidden");
+    renderSelect();
+  }
+
+  document.getElementById("backBtn").addEventListener("click", backToSelect);
+  document.getElementById("restartBtn").addEventListener("click", () => startLevel(LEVELS.findIndex(l => l.id === currentLvl.id)));
+
+  renderSelect();
+</script>
+</body>
+</html>
